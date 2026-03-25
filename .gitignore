@@ -1,0 +1,19 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Chrome extension development
+*.crx
+*.pem
+*.zip
+
+# Secret Sauce
+/docs*
+PROJECT.md
