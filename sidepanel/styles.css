@@ -125,6 +125,64 @@ body {
   color: var(--text-muted);
 }
 
+.header-debug {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.debug-pill {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+
+.debug-pill.ok {
+  background: var(--primary-muted);
+  color: var(--primary);
+}
+
+.debug-pill.missing {
+  background: rgba(229, 72, 77, 0.15);
+  color: var(--danger);
+}
+
+.debug-pill.loading {
+  background: rgba(240, 199, 94, 0.15);
+  color: var(--warning);
+}
+
+.debug-pill.error {
+  background: rgba(229, 72, 77, 0.15);
+  color: var(--danger);
+}
+
+.header-error {
+  margin-top: 6px;
+  font-size: 11px;
+  padding: 6px 8px;
+  background: rgba(229, 72, 77, 0.08);
+  border: 1px solid rgba(229, 72, 77, 0.3);
+  border-radius: 4px;
+  color: var(--danger);
+  line-height: 1.4;
+}
+
+.header-info {
+  margin-top: 6px;
+  font-size: 11px;
+  padding: 6px 8px;
+  background: rgba(240, 199, 94, 0.08);
+  border: 1px solid rgba(240, 199, 94, 0.3);
+  border-radius: 4px;
+  color: var(--warning);
+  line-height: 1.4;
+}
+
 /* -- Empty state -- */
 .empty-state {
   display: flex;

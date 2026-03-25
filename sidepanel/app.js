@@ -59,6 +59,7 @@ function App() {
   const [logEntries, setLogEntries] = useState([]);
   const [realtimeMonitor] = useState(() => new RealtimeMonitor());
   const [schema, setSchema] = useState(null);
+  const [schemaStatus, setSchemaStatus] = useState(null); // null | 'loading' | 'loaded' | 'error' | 'empty'
   const [sourceTabId, setSourceTabId] = useState(pinnedTabId);
 
   useEffect(() => {
@@ -115,20 +116,76 @@ function App() {
     };
   }, []);
 
+  // Collect table names from intercepted requests (fallback for when spec is blocked)
+  const [discoveredTables, setDiscoveredTables] = useState(new Set());
+
+  // Track tables seen in log entries
+  useEffect(() => {
+    const tableNames = new Set(discoveredTables);
+    for (const entry of logEntries) {
+      if (entry.url) {
+        const match = entry.url.match(/\/rest\/v1\/([^?/]+)/);
+        if (match && match[1] !== 'rpc') tableNames.add(match[1]);
+      }
+    }
+    if (tableNames.size !== discoveredTables.size) {
+      setDiscoveredTables(tableNames);
+    }
+  }, [logEntries]);
+
   // Load schema when credentials become available
   useEffect(() => {
     if (!credentials?.projectUrl) return;
     async function loadSchema() {
+      setSchemaStatus('loading');
       const client = new SupabaseRest(credentials);
+
+      // Try OpenAPI spec first
       const spec = await client.getOpenApiSpec();
-      if (spec) setSchema(parseOpenApiSpec(spec));
+      if (spec) {
+        const parsed = parseOpenApiSpec(spec);
+        if (parsed.tables.length > 0 || parsed.rpcs.length > 0) {
+          setSchemaStatus('loaded');
+          setSchema(parsed);
+          return;
+        }
+      }
+
+      // Fallback: probe tables discovered from intercepted requests
+      console.log('[Supabase Inspector] OpenAPI spec unavailable, falling back to table probing');
+      setSchemaStatus('probing');
+
+      const tableNames = [...discoveredTables];
+      if (tableNames.length === 0) {
+        setSchemaStatus('error');
+        return;
+      }
+
+      const tables = [];
+      for (const name of tableNames) {
+        const probed = await client.probeTable(name);
+        if (probed) {
+          tables.push({
+            name,
+            columns: probed.columns,
+            primaryKey: probed.columns.find(c => c.primaryKey)?.name || null
+          });
+        }
+      }
+
+      if (tables.length > 0) {
+        setSchema({ tables: tables.sort((a, b) => a.name.localeCompare(b.name)), rpcs: [] });
+        setSchemaStatus('loaded');
+      } else {
+        setSchemaStatus('error');
+      }
     }
     loadSchema();
-  }, [credentials?.projectUrl, credentials?.jwt]);
+  }, [credentials?.projectUrl, credentials?.jwt, discoveredTables.size]);
 
   return html`
     <div class="app">
-      <${Header} credentials=${credentials} />
+      <${Header} credentials=${credentials} schemaStatus=${schemaStatus} />
       ${credentials && html`
         <${TabBar}
           tabs=${TABS}

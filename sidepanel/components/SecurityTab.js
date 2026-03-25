@@ -2,6 +2,7 @@ import { h } from '../../vendor/preact.module.js';
 import { useState, useEffect } from '../../vendor/preact-hooks.module.js';
 import htm from '../../vendor/htm.module.js';
 import { SupabaseRest } from '../../lib/supabase-rest.js';
+import { extractTableNames } from '../../lib/schema-parser.js';
 import { decodeJwt, getJwtExpiry, formatExpiry } from '../../lib/jwt-decode.js';
 
 const html = htm.bind(h);
@@ -22,12 +23,6 @@ function classifyRisk(status, rowCount) {
   return 'safe';
 }
 
-function extractTableNames(spec) {
-  if (!spec?.paths) return [];
-  return Object.keys(spec.paths)
-    .map(path => path.replace(/^\//, ''))
-    .filter(name => name && !name.startsWith('rpc/'));
-}
 
 export function SecurityTab({ credentials }) {
   const [results, setResults] = useState([]);

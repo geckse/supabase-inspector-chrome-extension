@@ -4,7 +4,7 @@ import { decodeJwt, getJwtExpiry, formatExpiry } from '../../lib/jwt-decode.js';
 
 const html = htm.bind(h);
 
-export function Header({ credentials }) {
+export function Header({ credentials, schemaStatus }) {
   const connected = !!credentials?.projectUrl;
   const decoded = credentials?.jwt ? decodeJwt(credentials.jwt) : null;
   const expiry = credentials?.jwt ? getJwtExpiry(credentials.jwt) : null;
@@ -36,6 +36,33 @@ export function Header({ credentials }) {
       ${email && html`
         <div class="header-user">
           User: ${email}${role ? ` | ${role}` : ''}
+        </div>
+      `}
+      ${connected && html`
+        <div class="header-debug">
+          <span class="debug-pill ${credentials.apikey ? 'ok' : 'missing'}">
+            apikey: ${credentials.apikey ? 'captured' : 'missing'}
+          </span>
+          <span class="debug-pill ${credentials.jwt ? 'ok' : 'missing'}">
+            jwt: ${credentials.jwt ? 'captured' : 'missing'}
+          </span>
+          <span class="debug-pill ${
+            schemaStatus === 'loaded' ? 'ok' :
+            schemaStatus === 'loading' ? 'loading' :
+            schemaStatus === 'error' ? 'error' : 'missing'
+          }">
+            schema: ${schemaStatus || 'pending'}
+          </span>
+        </div>
+      `}
+      ${schemaStatus === 'error' && html`
+        <div class="header-error">
+          Schema endpoint blocked (401). Navigate the site to trigger Supabase requests \u2014 tables will be discovered from intercepted traffic.
+        </div>
+      `}
+      ${schemaStatus === 'probing' && html`
+        <div class="header-info">
+          OpenAPI spec unavailable. Discovering tables from intercepted requests...
         </div>
       `}
     </header>
