@@ -59,6 +59,26 @@ No build step required — this is a plain ES modules extension.
 └── icons/                     # Extension icons
 ```
 
+## RLS Checker — What It Tests
+
+The Security tab's RLS Checker probes every table discovered via the OpenAPI spec. Here's what it checks:
+
+| Check | How | What it flags |
+|---|---|---|
+| **Anonymous read** | `SELECT *` with only the `apikey` (no JWT) | Tables readable without authentication — flagged as exposed if 30+ rows, warning if fewer |
+| **Authenticated read** | `SELECT *` with the intercepted JWT | Sensitive tables where the authenticated role can read 30+ rows (may indicate missing row-level scoping) |
+| **Anonymous INSERT** | `POST {}` with only the `apikey` | Tables that accept inserts from unauthenticated users (inferred from 400/409/201 vs 401/403) |
+| **Authenticated INSERT** | `POST {}` with the JWT | Sensitive tables where the authenticated role can insert (same status-code inference) |
+| **Column exposure diff** | Compares column lists between anon and auth responses | Flags when anonymous access exposes columns that are hidden from authenticated users |
+| **Sensitive table detection** | Matches table names against a built-in list (`users`, `payments`, `api_keys`, etc.) | Sensitive tables are sorted first and have stricter thresholds |
+
+### Known gaps
+
+- **UPDATE and DELETE are not tested.** PostgREST returns `200`/`204` for "0 rows affected" regardless of whether RLS allows the operation, so there's no way to distinguish "denied by policy" from "allowed but matched nothing" without side effects.
+- **Row-level scoping** is not verified. The checker can detect *whether* a role has access, but not *whether* RLS policies correctly scope rows to the current user (e.g. `auth.uid() = user_id`).
+- **The sensitive table list is static.** Custom table names that hold sensitive data but aren't in the built-in list won't get the stricter thresholds.
+- **Schema-level restrictions**: tables in non-public schemas are still checked if they are discovered from intercepted traffic (the extension falls back to probing tables from logged requests when the OpenAPI spec is unavailable). However, tables that never appear in traffic won't be discovered.
+
 ## Security Notes
 
 - Credentials are **never persisted** to disk or sent to any external service.
