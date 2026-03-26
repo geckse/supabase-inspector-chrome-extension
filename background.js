@@ -53,22 +53,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     case 'get-active-tab': {
-      chrome.tabs.query({ active: true, lastFocusedWindow: true }, (tabs) => {
-        // Filter out extension pages — find a real web tab
-        const webTab = tabs.find(t => t.url && !t.url.startsWith('chrome'));
-        if (webTab) {
-          sendResponse(webTab);
-        } else {
-          // Fallback: find any tab that has stored credentials
-          const allTabIds = [...credentials._store.keys()];
-          if (allTabIds.length > 0) {
-            chrome.tabs.get(allTabIds[allTabIds.length - 1], (tab) => {
-              sendResponse(tab || null);
-            });
-          } else {
-            sendResponse(null);
-          }
+      // Try all windows to find a real web tab with credentials
+      chrome.tabs.query({}, (allTabs) => {
+        // 1. Prefer the active tab in the last focused non-extension window
+        const activeTabs = allTabs.filter(t => t.active && t.url && !t.url.startsWith('chrome-extension'));
+        const withCreds = activeTabs.find(t => credentials.has(t.id));
+        if (withCreds) { sendResponse(withCreds); return; }
+
+        // 2. Any active non-extension tab
+        const anyActive = activeTabs.find(t => !t.url.startsWith('chrome:'));
+        if (anyActive) { sendResponse(anyActive); return; }
+
+        // 3. Any tab that has credentials
+        const credTabIds = [...credentials._store.keys()];
+        if (credTabIds.length > 0) {
+          const credTab = allTabs.find(t => t.id === credTabIds[credTabIds.length - 1]);
+          if (credTab) { sendResponse(credTab); return; }
         }
+
+        sendResponse(activeTabs[0] || null);
       });
       return true;
     }

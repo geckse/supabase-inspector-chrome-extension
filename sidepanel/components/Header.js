@@ -4,7 +4,7 @@ import { decodeJwt, getJwtExpiry, formatExpiry } from '../../lib/jwt-decode.js';
 
 const html = htm.bind(h);
 
-export function Header({ credentials, schemaStatus }) {
+export function Header({ credentials, schemaStatus, onClearCache }) {
   const connected = !!credentials?.projectUrl;
   const decoded = credentials?.jwt ? decodeJwt(credentials.jwt) : null;
   const expiry = credentials?.jwt ? getJwtExpiry(credentials.jwt) : null;
@@ -48,11 +48,16 @@ export function Header({ credentials, schemaStatus }) {
           </span>
           <span class="debug-pill ${
             schemaStatus === 'loaded' ? 'ok' :
-            schemaStatus === 'loading' ? 'loading' :
+            schemaStatus === 'loading' || schemaStatus === 'probing' ? 'loading' :
             schemaStatus === 'error' ? 'error' : 'missing'
           }">
             schema: ${schemaStatus || 'pending'}
           </span>
+          ${schemaStatus === 'loaded' && onClearCache && html`
+            <button class="debug-pill-btn" onClick=${onClearCache} title="Clear cached schema and reload">
+              \u21BB
+            </button>
+          `}
         </div>
       `}
       ${schemaStatus === 'error' && html`
