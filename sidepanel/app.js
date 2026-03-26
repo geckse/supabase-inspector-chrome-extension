@@ -1,5 +1,5 @@
 import { h, render } from '../vendor/preact.module.js';
-import { useState, useEffect } from '../vendor/preact-hooks.module.js';
+import { useState, useEffect, useRef } from '../vendor/preact-hooks.module.js';
 import htm from '../vendor/htm.module.js';
 import { Header } from './components/Header.js';
 import { TabBar } from './components/TabBar.js';
@@ -49,9 +49,39 @@ function matchResponseToRequest(entries, responseData) {
   });
 }
 
-// Check if a pinned tabId was passed via URL (popup window mode)
+// Popup window mode: tab ID passed via URL param
 const urlParams = new URLSearchParams(window.location.search);
 const pinnedTabId = urlParams.get('tabId') ? Number(urlParams.get('tabId')) : null;
+
+// Schema cache helpers
+function schemaStorageKey(projectUrl) {
+  return `schema_cache_${projectUrl.replace(/[^a-zA-Z0-9]/g, '_')}`;
+}
+
+async function loadCachedSchema(projectUrl) {
+  try {
+    const key = schemaStorageKey(projectUrl);
+    const result = await chrome.storage.local.get(key);
+    const cached = result[key];
+    if (cached?.schema?.tables && cached.timestamp) {
+      if (Date.now() - cached.timestamp < 24 * 60 * 60 * 1000) {
+        return cached.schema;
+      }
+    }
+  } catch (e) {
+    console.warn('[Supabase Inspector] Cache read error:', e);
+  }
+  return null;
+}
+
+async function saveCachedSchema(projectUrl, schemaData) {
+  try {
+    const key = schemaStorageKey(projectUrl);
+    await chrome.storage.local.set({ [key]: { schema: schemaData, timestamp: Date.now() } });
+  } catch (e) {
+    console.warn('[Supabase Inspector] Cache write error:', e);
+  }
+}
 
 function App() {
   const [credentials, setCredentials] = useState(null);
@@ -59,27 +89,21 @@ function App() {
   const [logEntries, setLogEntries] = useState([]);
   const [realtimeMonitor] = useState(() => new RealtimeMonitor());
   const [schema, setSchema] = useState(null);
-  const [schemaStatus, setSchemaStatus] = useState(null); // null | 'loading' | 'loaded' | 'error' | 'empty'
-  const [sourceTabId, setSourceTabId] = useState(pinnedTabId);
+  const [schemaStatus, setSchemaStatus] = useState(null);
 
+  // Track which project we've already loaded schema for (avoid re-fetching on every poll)
+  const schemaLoadedFor = useRef(null);
+
+  // ── Credential polling ──
   useEffect(() => {
     async function loadCredentials() {
-      let tabId = sourceTabId;
-
-      // If no pinned tab, discover the active tab
+      let tabId = pinnedTabId;
       if (!tabId) {
         const tab = await chrome.runtime.sendMessage({ type: 'get-active-tab' });
-        if (tab) {
-          tabId = tab.id;
-          setSourceTabId(tabId);
-        }
+        if (tab) tabId = tab.id;
       }
-
       if (tabId) {
-        const creds = await chrome.runtime.sendMessage({
-          type: 'get-credentials',
-          tabId
-        });
+        const creds = await chrome.runtime.sendMessage({ type: 'get-credentials', tabId });
         setCredentials(creds);
       }
     }
@@ -87,27 +111,14 @@ function App() {
     loadCredentials();
 
     const listener = (message) => {
-      if (message.type === 'credentials-updated') {
-        setCredentials(message.data);
-      }
-      if (message.type === 'log-entry') {
-        setLogEntries(prev => [message.data, ...prev].slice(0, 500));
-      }
-      if (message.type === 'log-entry-response') {
-        setLogEntries(prev => matchResponseToRequest(prev, message.data));
-      }
-      if (message.type === 'realtime-connect') {
-        realtimeMonitor.handleConnect(message.data.socketId, message.data.url);
-      }
-      if (message.type === 'realtime-message') {
-        realtimeMonitor.handleMessage(message.data.socketId, message.data.direction, message.data.data);
-      }
-      if (message.type === 'realtime-status') {
-        realtimeMonitor.handleStatus(message.data.socketId, message.data.status);
-      }
+      if (message.type === 'credentials-updated') setCredentials(message.data);
+      if (message.type === 'log-entry') setLogEntries(prev => [message.data, ...prev].slice(0, 500));
+      if (message.type === 'log-entry-response') setLogEntries(prev => matchResponseToRequest(prev, message.data));
+      if (message.type === 'realtime-connect') realtimeMonitor.handleConnect(message.data.socketId, message.data.url);
+      if (message.type === 'realtime-message') realtimeMonitor.handleMessage(message.data.socketId, message.data.direction, message.data.data);
+      if (message.type === 'realtime-status') realtimeMonitor.handleStatus(message.data.socketId, message.data.status);
     };
     chrome.runtime.onMessage.addListener(listener);
-
     const interval = setInterval(loadCredentials, 3000);
 
     return () => {
@@ -116,47 +127,56 @@ function App() {
     };
   }, []);
 
-  // Collect table names from intercepted requests (fallback for when spec is blocked)
-  const [discoveredTables, setDiscoveredTables] = useState(new Set());
-
-  // Track tables seen in log entries
+  // ── Schema loading ──
+  // Runs once when credentials.projectUrl changes (not on every poll cycle)
   useEffect(() => {
-    const tableNames = new Set(discoveredTables);
-    for (const entry of logEntries) {
-      if (entry.url) {
-        const match = entry.url.match(/\/rest\/v1\/([^?/]+)/);
-        if (match && match[1] !== 'rpc') tableNames.add(match[1]);
-      }
-    }
-    if (tableNames.size !== discoveredTables.size) {
-      setDiscoveredTables(tableNames);
-    }
-  }, [logEntries]);
+    if (!credentials?.projectUrl || !credentials?.apikey) return;
 
-  // Load schema when credentials become available
-  useEffect(() => {
-    if (!credentials?.projectUrl) return;
+    const projectKey = `${credentials.projectUrl}|${credentials.apikey}`;
+    if (schemaLoadedFor.current === projectKey) return;
+    schemaLoadedFor.current = projectKey;
+
     async function loadSchema() {
       setSchemaStatus('loading');
-      const client = new SupabaseRest(credentials);
 
-      // Try OpenAPI spec first
+      // 1. Try cache
+      const cached = await loadCachedSchema(credentials.projectUrl);
+      if (cached && cached.tables.length > 0) {
+        setSchema(cached);
+        setSchemaStatus('loaded');
+      }
+
+      // 2. Try OpenAPI spec (always, to get fresh data)
+      const client = new SupabaseRest(credentials);
       const spec = await client.getOpenApiSpec();
       if (spec) {
         const parsed = parseOpenApiSpec(spec);
         if (parsed.tables.length > 0 || parsed.rpcs.length > 0) {
-          setSchemaStatus('loaded');
           setSchema(parsed);
+          setSchemaStatus('loaded');
+          saveCachedSchema(credentials.projectUrl, parsed);
           return;
         }
       }
 
-      // Fallback: probe tables discovered from intercepted requests
-      console.log('[Supabase Inspector] OpenAPI spec unavailable, falling back to table probing');
-      setSchemaStatus('probing');
+      // 3. If spec failed and no cache, try probing tables from intercepted traffic
+      if (!cached || cached.tables.length === 0) {
+        setSchemaStatus('probing');
+        await probeFromTraffic(client);
+      }
+    }
 
-      const tableNames = [...discoveredTables];
-      if (tableNames.length === 0) {
+    async function probeFromTraffic(client) {
+      // Extract table names from log entries
+      const tableNames = new Set();
+      for (const entry of logEntries) {
+        if (entry.url) {
+          const match = entry.url.match(/\/rest\/v1\/([^?/]+)/);
+          if (match && match[1] !== 'rpc') tableNames.add(match[1]);
+        }
+      }
+
+      if (tableNames.size === 0) {
         setSchemaStatus('error');
         return;
       }
@@ -174,18 +194,78 @@ function App() {
       }
 
       if (tables.length > 0) {
-        setSchema({ tables: tables.sort((a, b) => a.name.localeCompare(b.name)), rpcs: [] });
+        const newSchema = { tables: tables.sort((a, b) => a.name.localeCompare(b.name)), rpcs: [] };
+        setSchema(newSchema);
         setSchemaStatus('loaded');
+        saveCachedSchema(credentials.projectUrl, newSchema);
       } else {
         setSchemaStatus('error');
       }
     }
+
     loadSchema();
-  }, [credentials?.projectUrl, credentials?.jwt, discoveredTables.size]);
+  }, [credentials?.projectUrl, credentials?.apikey]);
+
+  // ── Probe new tables when discovered from traffic (only if spec was blocked) ──
+  useEffect(() => {
+    if (schemaStatus !== 'error' && schemaStatus !== 'probing') return;
+    if (!credentials?.projectUrl || !credentials?.apikey) return;
+
+    const tableNames = new Set();
+    for (const entry of logEntries) {
+      if (entry.url) {
+        const match = entry.url.match(/\/rest\/v1\/([^?/]+)/);
+        if (match && match[1] !== 'rpc') tableNames.add(match[1]);
+      }
+    }
+
+    // Check if we have new tables not yet in schema
+    const existingNames = new Set((schema?.tables || []).map(t => t.name));
+    const newNames = [...tableNames].filter(n => !existingNames.has(n));
+    if (newNames.length === 0) return;
+
+    async function probeNewTables() {
+      const client = new SupabaseRest(credentials);
+      const newTables = [];
+      for (const name of newNames) {
+        const probed = await client.probeTable(name);
+        if (probed) {
+          newTables.push({
+            name,
+            columns: probed.columns,
+            primaryKey: probed.columns.find(c => c.primaryKey)?.name || null
+          });
+        }
+      }
+
+      if (newTables.length > 0) {
+        const merged = {
+          tables: [...(schema?.tables || []), ...newTables].sort((a, b) => a.name.localeCompare(b.name)),
+          rpcs: schema?.rpcs || []
+        };
+        setSchema(merged);
+        setSchemaStatus('loaded');
+        saveCachedSchema(credentials.projectUrl, merged);
+      }
+    }
+
+    probeNewTables();
+  }, [logEntries.length]);
+
+  // ── Clear cache handler ──
+  async function handleClearCache() {
+    if (credentials?.projectUrl) {
+      const key = schemaStorageKey(credentials.projectUrl);
+      await chrome.storage.local.remove(key);
+      setSchema(null);
+      setSchemaStatus(null);
+      schemaLoadedFor.current = null; // Allow re-fetch
+    }
+  }
 
   return html`
     <div class="app">
-      <${Header} credentials=${credentials} schemaStatus=${schemaStatus} />
+      <${Header} credentials=${credentials} schemaStatus=${schemaStatus} onClearCache=${handleClearCache} />
       ${credentials && html`
         <${TabBar}
           tabs=${TABS}
@@ -201,7 +281,7 @@ function App() {
           </div>
         `}
         ${credentials && currentTab === 'security' && html`
-          <${SecurityTab} credentials=${credentials} />
+          <${SecurityTab} credentials=${credentials} schema=${schema} />
         `}
         ${credentials && currentTab === 'logger' && html`
           <${LoggerTab} entries=${logEntries} onClear=${() => setLogEntries([])} />

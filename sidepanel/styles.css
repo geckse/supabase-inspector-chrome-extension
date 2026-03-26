@@ -161,6 +161,22 @@ body {
   color: var(--danger);
 }
 
+.debug-pill-btn {
+  font-size: 12px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1.6;
+}
+
+.debug-pill-btn:hover {
+  background: var(--bg-overlay);
+  color: var(--text-primary);
+}
+
 .header-error {
   margin-top: 6px;
   font-size: 11px;
@@ -315,10 +331,72 @@ body {
   color: var(--text-primary);
 }
 
+.rls-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.rls-summary-total {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.rls-filters {
+  display: flex;
+  gap: 4px;
+}
+
+.rls-filter-danger.btn-active {
+  background: rgba(229, 72, 77, 0.15);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.rls-filter-warning.btn-active {
+  background: rgba(240, 199, 94, 0.15);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.rls-filter-safe.btn-active {
+  background: var(--primary-muted);
+  border-color: var(--safe);
+  color: var(--safe);
+}
+
+.rls-export {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.rls-export-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
 .risk-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.risk-row-wrap {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.risk-row-wrap:has(.risk-row.expanded) {
+  border-color: var(--primary);
 }
 
 .risk-row {
@@ -326,8 +404,9 @@ body {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 4px;
   font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s;
 }
 
 .risk-row:hover {
@@ -362,12 +441,9 @@ body {
   color: var(--danger);
 }
 
-.risk-detail {
+.risk-issue-count {
+  font-size: 10px;
   color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  min-width: 60px;
-  text-align: right;
 }
 
 .risk-label {
@@ -375,6 +451,135 @@ body {
   font-weight: 600;
   min-width: 55px;
   text-align: right;
+}
+
+.risk-chevron {
+  color: var(--text-muted);
+  font-size: 11px;
+  width: 12px;
+  text-align: center;
+}
+
+/* Risk detail panel */
+.risk-detail-panel {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-base);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: slideDown 0.15s ease;
+}
+
+/* Access grid */
+.risk-access-grid-3col {
+  display: grid;
+  grid-template-columns: 50px repeat(3, 1fr);
+  gap: 2px;
+  font-size: 11px;
+}
+
+.risk-access-note {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 2px 0;
+}
+
+.risk-access-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 2px 4px;
+  text-align: center;
+}
+
+.risk-access-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 3px 4px;
+}
+
+.risk-access-cell {
+  text-align: center;
+  padding: 2px 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+/* Detail sections */
+.risk-detail-section {
+  font-size: 11px;
+}
+
+.risk-detail-section strong {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 2px;
+}
+
+.risk-columns {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+/* Issues list */
+.risk-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.risk-issue {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.risk-issue-danger {
+  background: rgba(229, 72, 77, 0.08);
+  border-left: 3px solid var(--danger);
+}
+
+.risk-issue-warning {
+  background: rgba(240, 199, 94, 0.08);
+  border-left: 3px solid var(--warning);
+}
+
+.risk-issue-icon {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.risk-issue-danger .risk-issue-icon { color: var(--danger); }
+.risk-issue-warning .risk-issue-icon { color: var(--warning); }
+
+.risk-issue-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.risk-issue-detail {
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.risk-no-issues {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 0;
 }
 
 /* JWT panel */
