@@ -1,6 +1,15 @@
 # Supabase Inspector
 
+![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
+![Manifest V3](https://img.shields.io/badge/Manifest-V3-34A853)
+![Preact](https://img.shields.io/badge/Preact-HTM-673AB8?logo=preact&logoColor=white)
+![No Build Step](https://img.shields.io/badge/Build_Step-None-green)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+
 A Chrome Extension (Manifest V3) for debugging remote Supabase applications from the user's perspective. Intercepts credentials from a page's own Supabase requests, then provides inspection and manipulation tools in a Chrome Side Panel.
+
+> **Warning**
+> This extension can perform **destructive and manipulative actions** on your Supabase database. It uses the intercepted credentials to make real API calls — including inserting, updating, and deleting rows, uploading and removing storage files, and executing RPC functions. These operations hit your live database with the permissions of the logged-in user. **Use with caution, especially on production environments.** There is no undo.
 
 ## Features
 
